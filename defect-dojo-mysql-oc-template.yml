@@ -1,0 +1,330 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: defect-dojo-template
+metadata:
+  name: "defect-dojo"
+  annotation:
+    openshift.io/display-name: "DefectDojo"
+    description: DefectDojo is a security tool that automates application security vulnerability management.
+    openshift.io/documentation-url: "https://defectdojo.readthedocs.io/en/latest/"
+    iconClass: "icon-django"
+  message: "The DefectDojo service url: http://{.spec.host}{.spec.path}/v1"
+objects:
+- kind: Secret
+  apiVersion: v1
+  metadata:
+    name: defect-dojo-secrets
+  stringData:
+    MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    DOJO_ADMIN_PASSWORD: ${DOJO_ADMIN_PASSWORD}
+    MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: defect-dojo
+    namespace: ${NAMESPACE}
+    labels:
+      app: defect-dojo
+    annotations:
+        description: Exposes and load balances the application pods
+  spec:
+    selector:
+      app: defect-dojo
+    ports:
+    - name: defect-dojo
+      port: 8000
+      protocol: TCP
+      targetPort: 8000
+
+- kind: Route
+  apiVersion: v1
+  metadata:
+    name: defect-dojo
+    namespace: ${NAMESPACE}
+    annotations:
+      description: Route for DefectDojo service
+      template.openshift.io/expose-uri: http://{.spec.host}{.spec.path}
+    labels:
+      app: defect-dojo
+  spec:
+    tls:
+      insecureEdgeTerminationPolicy: Redirect
+      termination: edge
+    port:
+      targetPort: defect-dojo
+    to:
+      kind: Service
+      name: defect-dojo
+    wildcardPolicy: None
+
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    labels:
+      app: defect-dojo
+    name: defect-dojo
+    namespace: ${NAMESPACE}
+  spec:
+    replicas: 1
+    selector:
+      deploymentconfig: defect-dojo
+    strategy:
+      type: Recreate
+      activeDeadlineSeconds: 21600
+      recreateParams:
+        timeoutSeconds: 6000
+      resources: {}
+    template:
+      metadata:
+        labels:
+          app: defect-dojo
+          deploymentconfig: defect-dojo
+      spec:
+        containers:
+        - image: docker.io/appsecpipeline/django-defectdojo:1.5.3.0
+          imagePullPolicy: Always
+          name: defect-dojo
+          ports:
+          - containerPort: 8000
+            protocol: TCP
+          env:
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: MYSQL_PASSWORD
+          - name: DOJO_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: DOJO_ADMIN_PASSWORD
+          - name: DOJO_MYSQL_HOST
+            value: ${DOJO_MYSQL_HOST}
+          - name: DOJO_MYSQL_PORT
+            value: ${DOJO_MYSQL_PORT}
+          - name: MYSQL_DATABASE
+            value: ${MYSQL_DATABASE}
+          - name: MYSQL_USER
+            value: ${MYSQL_USER}
+          - name: DOJO_ADMIN_USER
+            value: ${DOJO_ADMIN_USER}
+          - name: DOJO_ADMIN_NAME
+            value: ${DOJO_ADMIN_NAME}
+          - name: DOJO_ADMIN_EMAIL
+            value: ${DOJO_ADMIN_EMAIL}
+          - name: RUN_TIERED
+            value: ${RUN_TIERED}
+          - name: LOAD_SAMPLE_DATA
+            value: ${LOAD_SAMPLE_DATA}
+          - name: DJANGO_DEBUG
+            value: ${DJANGO_DEBUG}
+          - name: DOJO_URL_PREFIX
+            value: ${DOJO_URL_PREFIX}
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        terminationGracePeriodSeconds: 30
+    test: false
+    triggers:
+    - type: ConfigChange
+
+- kind: PersistentVolumeClaim
+  apiVersion: v1
+  metadata:
+    name: "defect-dojo-storage"
+  spec:
+    storageClassName: ${STORAGE_CLASS_NAME}
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: ${DOJO_DB_CAPACITY}
+
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: defect-dojo-mysql
+  spec:
+    replicas: 1
+    strategy:
+      type: Recreate
+      activeDeadlineSeconds: 21600
+      recreateParams:
+        timeoutSeconds: 1200
+      resources: {}
+    template:
+      metadata:
+        name: defect-dojo-mysql
+        labels:
+          name: defect-dojo-mysql
+          component: defect-dojo-mysql
+      spec:
+        containers:
+        - name: defect-dojo
+          env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: MYSQL_ROOT_PASSWORD
+          - name: MYSQL_DATABASE
+            value: ${MYSQL_DATABASE}
+          - name: MYSQL_USER
+            value: ${MYSQL_USER}
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: MYSQL_PASSWORD
+          image: registry.hub.docker.com/library/mysql
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 1Gi
+          ports:
+          - containerPort: 5432
+            protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 3306
+            timeoutSeconds: 1
+          readinessProbe:
+            exec:
+              command:
+              - /usr/libexec/check-container
+            failureThreshold: 3
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          securityContext:
+            capabilities: {}
+            privileged: false
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: defect-dojo-storage
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - name: defect-dojo-storage
+          persistentVolumeClaim:
+            claimName: defect-dojo-storage
+    test: false
+    triggers:
+    - type: ConfigChange
+
+- kind: Service
+  apiVersion: v1
+  metadata:
+    labels:
+      component: ${DOJO_MYSQL_HOST}
+    name: defect-dojo-mysql
+  spec:
+    ports:
+    - name: defect-dojo
+      port: 3306
+      protocol: TCP
+      targetPort: 3306
+    selector:
+      name: defect-dojo-mysql
+
+parameters:
+- name: NAMESPACE
+  displayName: Current namespace
+  description: OC namespace to deploy into
+  required: true
+  value: edp-cicd-vlg1
+
+- name: MYSQL_DATABASE
+  displayName: Defect Dojo DB Name
+  description: Defect Dojo database name which will be used
+  required: true
+  value: dojo
+
+- name: MYSQL_USER
+  displayName: Mysql user
+  description: MySql user
+  required: true
+  value: root
+
+- name: MYSQL_PASSWORD
+  displayName: Mysql password
+  description: MySql user's password
+  required: true
+  value: defectdojo
+
+- name: MYSQL_ROOT_PASSWORD
+  displayName: Mysql ROOT password
+  description: MySql ROOT's password
+  required: true
+  value: MYSQLROOTPWD
+
+- name: DOJO_MYSQL_HOST
+  displayName: Mysql Host
+  description: MySql hostname
+  required: true
+  value: defect-dojo-mysql
+
+- name: DOJO_MYSQL_PORT
+  displayName: Mysql Port
+  description: MySql Port
+  required: true
+  value: '3306'
+
+- name: DOJO_ADMIN_USER
+  displayName: Defect Dojo Superuser name
+  description: Defect Dojo Superuser name
+  required: true
+  value: admin
+
+- name: DOJO_ADMIN_PASSWORD
+  displayName: Defect Dojo Superuser password
+  description: Defect Dojo Superuser password
+  required: true
+  value: dojoadmin
+
+- name: DOJO_ADMIN_NAME
+  displayName: Defect Dojo Superuser full name
+  description: Defect Dojo Superuser full name
+  value: Admin User
+
+- name: DOJO_ADMIN_EMAIL
+  displayName: Defect Dojo Superuser email
+  description: Defect Dojo Superuser email
+  value: admin@dojo.local
+
+- name: RUN_TIERED
+  value: 'True'
+
+- name: LOAD_SAMPLE_DATA
+  value: 'True'
+
+- name: DJANGO_DEBUG
+  value: 'True'
+
+- name: DOJO_URL_PREFIX
+  value: ''
+
+- name: DOJO_DB_CAPACITY
+  displayName: Defect Dojo database Volume Capacity
+  value: 1Gi
+
+- name: STORAGE_CLASS_NAME
+  displayName: Defect Dojo database storage class name
+  description: Storage class name to consume by Defect Dojo
+  value: efs
+
+# - name: DD_FQDN
+#   displayName: "Defect Dojo FQDN"
+#   description: "Defect Dojo fully qualified domain name"
+#   required: true
+#   value: "vuln-management-security-edp-cicd-vlg1"
+#
