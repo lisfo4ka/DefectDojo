@@ -18,6 +18,7 @@ objects:
   stringData:
     SQLPWD: ${SQLPWD}
     DOJO_ADMIN_PASSWORD: ${DOJO_ADMIN_PASSWORD}
+    MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
 
 - kind: Service
   apiVersion: v1
@@ -89,11 +90,6 @@ objects:
           - containerPort: 8000
             protocol: TCP
           env:
-          - name: SQLPWD
-            valueFrom:
-              secretKeyRef:
-                name: defect-dojo-secrets
-                key: SQLPWD
           - name: DOJO_ADMIN_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -107,6 +103,11 @@ objects:
             value: ${DBNAME}
           - name: SQLUSER
             value: ${SQLUSER}
+          - name: SQLPWD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: SQLPWD
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         terminationGracePeriodSeconds: 30
@@ -148,15 +149,20 @@ objects:
         containers:
         - name: defect-dojo
           env:
-          - name: DBNAME
+          - name: MYSQL_DATABASE
             value: ${DBNAME}
-          - name: SQLUSER
+          - name: MYSQL_USER
             value: ${SQLUSER}
-          - name: SQLPWD
+          - name: MYSQL_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: defect-dojo-secrets
                 key: SQLPWD
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: defect-dojo-secrets
+                key: MYSQL_ROOT_PASSWORD
           image: registry.hub.docker.com/library/mysql
           imagePullPolicy: IfNotPresent
           resources:
@@ -238,7 +244,7 @@ parameters:
   displayName: DB user
   description: Database user
   required: true
-  value: root
+  value: dojo
 
 - name: SQLPWD
   displayName: DB password
@@ -257,6 +263,12 @@ parameters:
   description: Database Port
   required: true
   value: '3306'
+
+- name: MYSQL_ROOT_PASSWORD
+  displayName: "Mysql ROOT password"
+  description: "MySql ROOT's password"
+  required: true
+  value: root123
 
 - name: DOJO_ADMIN_PASSWORD
   displayName: Defect Dojo Superuser password
