@@ -240,7 +240,7 @@ parameters:
   displayName: Current namespace
   description: OC namespace to deploy into
   required: true
-  value: edp-cicd-vlg1
+  value: cicd
 
 - name: MYSQL_DATABASE
   displayName: Defect Dojo DB Name
@@ -325,5 +325,5 @@ parameters:
 #   displayName: "Defect Dojo FQDN"
 #   description: "Defect Dojo fully qualified domain name"
 #   required: true
-#   value: "vuln-management-security-edp-cicd-vlg1"
+#   value: "vuln-management-security-cicd"
 #

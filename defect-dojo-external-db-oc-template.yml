@@ -226,7 +226,7 @@ parameters:
   displayName: Current namespace
   description: OC namespace to deploy into
   required: true
-  value: edp-cicd-vlg1
+  value: cicd
 
 - name: DBTYPE
   displayName: Defect Dojo DB Type
@@ -289,4 +289,3 @@ parameters:
   displayName: "Defect Dojo FQDN"
   description: "Defect Dojo fully qualified domain name"
   required: true
-  value: "defect-dojo-edp-cicd-vlg1.epam-dev.aws-rgn-vlgn.com"
